@@ -7,7 +7,7 @@ var bodyParser = require('body-parser');
 var cors = require('cors')
 var mongojs = require('mongojs');
 
-var db = mongojs('mongodb://127.0.0.1:27017/lotteries');
+var db = mongojs('mongodb://127.0.0.1:27017/lottery');
 var index = require('./routes/index');
 var lotteries = require('./routes/lotteries');
 var luckyNumberdb = require('./routes/luckyNumberdb');
@@ -16,10 +16,13 @@ var eventdata = require('./routes/eventdata');
 var schedule = require('node-schedule');
 var eventdatajson = require(path.resolve(__filename, '../eventdata.json'));
 var history = require('connect-history-api-fallback');
+var moment = require('moment');
+var fs = require('fs');
+
 
 var app = express();
 app.use(history());
-// view engine setup
+
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 
@@ -45,6 +48,8 @@ app.use('/api/eventdata', eventdata);
 // node-schedule set up a schedule for auto run something
 var eventStartTime = eventdatajson.eventStartTime;
 var eventEndTime = eventdatajson.eventEndTime;
+
+
 //start event/ 1. update a new luckynumber 2.clean lotteries, winners
 schedule.scheduleJob(eventStartTime, function() {
     console.log('Event started: ' + eventStartTime);
@@ -59,17 +64,25 @@ schedule.scheduleJob(eventStartTime, function() {
 //2. calulate winner list,order by calulating lotteries diff
 schedule.scheduleJob(eventEndTime, function() {
     console.log('Event passed: ' + eventEndTime);
+
     db.lotteries.find().sort({ diff: 1 }, function(err, lotteries) {
-            db.winners.save(lotteries, function(err, winner) {
-                //	console.log(lotteries)
-            })
+            if (lotteries.length != 0) {
+                db.winners.save(lotteries, function(err, winner) {
+                    //	console.log(lotteries)
+                })
+            }
         })
         //eventdatajson.resetday days after eventEndTime, reset
 
-    var resetTime = 1000 * 60 * 60 * 24 * (eventdatajson.resetday);
-    //var resetTime =1000*60;
+    //var resetTime = 1000 * 60 * 60 * 24 * (eventdatajson.resetday);
+    var resetTime = 1000 * 15;
+    console.log("resetTime:" + resetTime)
     setTimeout(function() {
-        console.log("resetTime:" + resetTime)
+        console.log("reset time's up.")
+        var m = JSON.parse(fs.readFileSync(path.resolve(__filename, '../eventdata.json')).toString());
+        m.eventStartTime = moment().add(15, 's').format('LL HH:mm:ss')
+        m.eventEndTime = moment().add(45, 's').format('LL HH:mm:ss')
+        fs.writeFile(path.resolve(__filename, '../eventdata.json').toString(), JSON.stringify(m));
         db.lotteries.remove({})
         db.winners.remove({})
     }, resetTime);
